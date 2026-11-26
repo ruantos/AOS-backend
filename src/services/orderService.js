@@ -98,7 +98,7 @@ export async function updateOrder(userId, id, input) {
 export async function deleteOrder(userId, id) {
   await prisma.$transaction(async tx => {
     const order = await ownedOrder(tx, userId, id, true);
-    if (order.status === 'IN_DELIVERY' || (order.delivery && !order.delivery.deletedAt)) throw new HttpError(409, 'DELIVERY_EXISTS', 'Pedido com entrega em acompanhamento não pode ser excluído.');
+    if (order.status === 'IN_DELIVERY' || (order.delivery && !order.delivery.deletedAt && ['ASSIGNED', 'OUT_FOR_DELIVERY'].includes(order.delivery.status))) throw new HttpError(409, 'DELIVERY_EXISTS', 'Pedido com entrega em acompanhamento não pode ser excluído.');
     const status = order.status === 'COMPLETED' ? 'COMPLETED' : 'CANCELLED';
     if (status !== order.status) await tx.statusHistory.create({ data: { orderId: id, changedById: userId, orderStatus: status } });
     await tx.order.update({ where: { id }, data: { deletedAt: new Date(), status } });

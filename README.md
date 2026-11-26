@@ -2,7 +2,7 @@
 
 API de pedidos e entregas locais, com atendentes e entregadores autenticados e rastreamento público para clientes sem cadastro.
 
-Projeto em desenvolvimento: base Express implementada e verificada por HTTP local em 26/11/2026. A persistência Prisma/PostgreSQL e a migração inicial também foram implementadas e verificadas em banco local descartável. Cadastro, login, logout e gerenciamento da própria conta foram implementados e verificados por HTTP com PostgreSQL local. CRUD HTTP de contatos de destinatários e produtos também está implementado e verificado. Pedidos e itens, totais, histórico de status e relacionamentos por URLs compostas também estão implementados e verificados. Entregas, rastreamento e Swagger ainda não estão implementados.
+Projeto em desenvolvimento. Implementados e verificados em PostgreSQL local: base Express, persistência, autenticação, conta própria, CRUD de contatos/produtos/pedidos/entregas, itens, histórico e URLs compostas. O endpoint público de rastreamento está implementado e verificado por HTTP. Este repositório contém somente o backend. Swagger, seed, coleção Postman e publicação ainda estão pendentes.
 
 ## Desenvolvimento
 
@@ -25,7 +25,7 @@ Se Node.js/npm estiverem instalados via NVM, ative o ambiente antes de executar 
 
 `npm start` inicia sem observação de arquivos. `PORT` define a porta local, com padrão 3000. `DATABASE_URL` configura o PostgreSQL; `JWT_SECRET` assina os tokens. `JWT_TTL_SECONDS` define sua duração, com padrão de 3600 segundos e intervalo permitido de 60 a 86400. Seus valores não devem ser versionados. As versões resolvidas estão registradas no `package-lock.json`.
 
-As rotas de autenticação, conta própria, contatos, produtos, pedidos e itens estão disponíveis abaixo. Rotas ainda não implementadas retornam 404 em JSON.
+As rotas de autenticação, conta própria, contatos, produtos, pedidos, itens e entregas estão disponíveis abaixo. Rotas ainda não implementadas retornam 404 em JSON.
 
 ## Persistência
 
@@ -37,9 +37,9 @@ As rotas de autenticação, conta própria, contatos, produtos, pedidos e itens 
 
 O esquema contém sete entidades de negócio e `Session`. Valores monetários usam `Decimal(12,2)`; o total do pedido é calculado pelos itens nos serviços, sem receber valores do cliente. `deletedAt` permite exclusão lógica de clientes, produtos, pedidos e entregas; usuários são desativados com `active`. O vínculo único entre pedido e entrega permanece após exclusão lógica. O histórico distingue eventos do pedido e da entrega por campos tipados. Notas internas não serão retornadas pela consulta pública.
 
-A migração inclui restrições SQL para preços não negativos, quantidades positivas, expiração de sessão posterior à criação e consistência do tipo de evento no histórico. Conta própria, contatos, produtos e pedidos já possuem autenticação e isolamento por usuário. Pedidos possuem transições validadas e preços históricos nos itens. Permissões de entregas e endereço histórico serão implementados na próxima etapa; o esquema isoladamente não implementa essas regras.
+A migração inclui restrições SQL para preços não negativos, quantidades positivas, expiração de sessão posterior à criação e consistência do tipo de evento no histórico. Conta própria, contatos, produtos e pedidos já possuem autenticação e isolamento por usuário. Pedidos possuem transições validadas e preços históricos nos itens. Entregas possuem autorização por atribuição, endereço histórico e sincronização de estados com o pedido; o esquema isoladamente não implementa essas regras.
 
-A conexão compartilhada está em `src/config/database.js`; os serviços de autenticação, contatos, produtos e pedidos já a utilizam. Não é necessário publicar um endpoint público de banco. O PostgreSQL usado na verificação foi temporário e não é a configuração de desenvolvimento ou de produção da equipe.
+A conexão compartilhada está em `src/config/database.js`, com sessões PostgreSQL em UTC para evitar deslocamento de datas; os serviços de autenticação e das entidades de negócio já a utilizam. Não é necessário publicar um endpoint público de banco. O PostgreSQL usado na verificação foi temporário e não é a configuração de desenvolvimento ou de produção da equipe.
 
 Prisma e seu adaptador PostgreSQL estão fixados na mesma versão. O override `effect: 3.22.5` corrige uma vulnerabilidade transitiva do CLI. A configuração JavaScript segue a [documentação do Prisma](https://www.prisma.io/docs/orm/v7/reference/prisma-config-reference).
 
@@ -143,13 +143,82 @@ Um pedido contém de 1 a 100 produtos distintos; cada quantidade é um número i
 
 O backend copia `price` para `unitPrice` na inclusão e calcula `subtotal` e `total` com aritmética decimal; respostas monetárias são textos com duas casas. Alterar preço do catálogo ou quantidade do item não altera o preço histórico já copiado. O corpo não aceita `total`, `unitPrice`, proprietário, status inicial, datas nem campos extras. Criação de pedido/itens/histórico e alterações de status são transacionais; as mutações de um mesmo pedido são serializadas no banco.
 
-Itens e observações só podem ser editados em `RECEIVED` ou `PREPARING`. Notas aceitam texto de até 1000 caracteres ou `null`. O fluxo manual nesta etapa é `RECEIVED → PREPARING → READY`; esses três estados também permitem cancelamento para `CANCELLED`, desde que não exista entrega não excluída vinculada. Estados inválidos no corpo retornam 400; transições não permitidas ou edição fora dos estados previstos retornam 409. Repetir o status atual não duplica o histórico. `IN_DELIVERY` e `COMPLETED` serão controlados pelo serviço de entregas; não é possível forçá-los pelo PATCH de pedido.
+Itens e observações só podem ser editados em `RECEIVED` ou `PREPARING`. Notas aceitam texto de até 1000 caracteres ou `null`. O fluxo manual nesta etapa é `RECEIVED → PREPARING → READY`; esses três estados também permitem cancelamento para `CANCELLED`, desde que não exista entrega não excluída vinculada. Estados inválidos no corpo retornam 400; transições não permitidas ou edição fora dos estados previstos retornam 409. Repetir o status atual não duplica o histórico. `IN_DELIVERY` e `COMPLETED` são controlados pelo serviço de entregas; não é possível forçá-los pelo PATCH de pedido.
 
-Criação registra um evento `RECEIVED`. Cada mudança de estado registra novo evento, autor e data, retornados em `order.history`. DELETE preserva itens e histórico, marca `deletedAt` e cancela pedidos ainda não concluídos, registrando o cancelamento se necessário. Pedidos em entrega ou com entrega não excluída vinculada não podem ser excluídos nesta etapa (409). Pedidos excluídos desaparecem das consultas e não podem ser editados. Excluir um contato não apaga seus pedidos, que continuam disponíveis por `/orders`; a rota composta exige contato não excluído.
+Criação registra um evento `RECEIVED`. Cada mudança de estado registra novo evento, autor e data, retornados em `order.history`. DELETE preserva itens e histórico, marca `deletedAt` e cancela pedidos ainda não concluídos, registrando o cancelamento se necessário. Pedidos em entrega ou com entrega ativa (`ASSIGNED`/`OUT_FOR_DELIVERY`) não excluída não podem ser excluídos (409). Entregas terminais (`DELIVERED`/`FAILED`) permitem excluir logicamente o pedido, preservando seu status terminal e histórico; a entrega deixa de aparecer nas consultas quando o pedido é excluído. Pedidos excluídos desaparecem das consultas e não podem ser editados. Excluir um contato não apaga seus pedidos, que continuam disponíveis por `/orders`; a rota composta exige contato não excluído.
 
 GET `/orders` e GET `/customers/:customerId/orders` aceitam `status`, `from` e `to`. Datas filtram `createdAt`, com limites inclusivos e timestamp ISO 8601 contendo fuso, como `2026-11-26T00:00:00Z`. A data final não pode ser anterior à inicial. A listagem é ordenada por criação decrescente e ID em caso de empate, sem paginação nesta versão.
 
 Verificação local da etapa 5: 151 respostas HTTP no fluxo principal, além de verificações dos limites monetários e rollback. Confirmados preços históricos, totais após alterações, transições, filtros, isolamento, produtos indisponíveis, exclusão lógica e proteção contra duas remoções simultâneas do último item. Uma falha controlada de gravação no banco descartável confirmou rollback integral de pedido, itens e histórico; a restrição temporária foi removida após a verificação. Não houve alteração de migrações ou dependências nem criação de suíte automatizada.
+
+## Entregas
+
+Entregas exigem login de atendente ou entregador. O atendente acessa somente entregas de pedidos que criou; o entregador acessa somente entregas atribuídas a si, inclusive quando atendem pedidos de atendentes diferentes. Filtros não ampliam essa permissão. Recursos alheios, excluídos ou de pedidos excluídos retornam 404. Nenhuma destas rotas é pública.
+
+| Método | Rota | Permissão e resposta |
+|---|---|---|
+| POST | `/deliveries` | Atendente; corpo `orderId` e `courierId`; 201 com `delivery` |
+| GET | `/deliveries` | Ambos; retorna `deliveries`, com filtros opcionais `status` e `courierId` |
+| GET | `/deliveries/:deliveryId` | Ambos, conforme vínculo; retorna `delivery` |
+| PATCH | `/deliveries/:deliveryId` | Ambos; andamento ou reatribuição permitida; retorna `delivery` |
+| DELETE | `/deliveries/:deliveryId` | Atendente; exclusão lógica; retorna 204 |
+| POST | `/orders/:orderId/delivery` | Atendente; corpo somente `courierId`; cria entrega para o pedido da URL |
+| GET | `/orders/:orderId/delivery` | Ambos, conforme vínculo; consulta entrega do pedido |
+| PATCH | `/orders/:orderId/delivery` | Ambos, conforme vínculo; mesmas regras de atualização |
+| DELETE | `/orders/:orderId/delivery` | Atendente; mesmas regras de exclusão |
+
+Criação exige pedido próprio em `READY` e usuário ativo com perfil `COURIER`. Usuário inexistente, inativo ou de outro perfil como responsável retorna 409. Cada pedido tem no máximo uma entrega durante seu ciclo, inclusive após exclusão lógica; nova criação para pedido com entrega retorna 409. O backend gera `trackingCode` aleatório e único, registra `assignedAt` e copia os campos de endereço do contato para `addressSnapshot`. Mudanças posteriores no contato não alteram essa cópia. O código é usado pelo rastreamento público, sem autenticação do cliente.
+
+O retorno inclui os campos da entrega, endereço histórico, `orderStatus` e histórico de eventos da entrega, sem carregar contas ou senhas. A listagem exclui registros apagados e é ordenada por criação decrescente e ID em caso de empate, sem paginação. O endereço e as observações internas estão restritos às rotas autenticadas.
+
+Atribuição: PATCH com `{ "courierId": "UUID_DO_ENTREGADOR" }` é exclusivo de atendente e só pode ocorrer em `ASSIGNED`, com pedido `READY`. Ao reatribuir, `assignedAt` é atualizado e o histórico registra a troca; o antigo entregador perde o acesso imediatamente. Não se altera responsável depois da saída. O novo responsável precisa estar ativo. A saída também verifica se o responsável continua ativo; se ele tiver sido desativado antes da saída, o atendente deverá reatribuir a entrega.
+
+Andamento: PATCH com `{ "status": "OUT_FOR_DELIVERY" }`, `{ "status": "DELIVERED" }` ou `{ "status": "FAILED", "failureNote": "Motivo da falha" }` pode ser realizado pelo atendente proprietário ou entregador atribuído. `failureNote` é obrigatório somente em `FAILED`, deve ser texto não vazio com até 1000 caracteres e não é permitido nos demais estados. Altere atribuição ou andamento em chamadas separadas.
+
+| Estado atual | Próximo estado | Situação do pedido |
+|---|---|---|
+| `ASSIGNED` | `OUT_FOR_DELIVERY` | `IN_DELIVERY` |
+| `ASSIGNED` | `FAILED` | `CANCELLED` |
+| `OUT_FOR_DELIVERY` | `DELIVERED` | `COMPLETED` |
+| `OUT_FOR_DELIVERY` | `FAILED` | `CANCELLED` |
+
+`DELIVERED` e `FAILED` são terminais; não há nova tentativa nesta versão. A conclusão preenche `deliveredAt`; a falha registra motivo e data no evento `FAILED` do histórico, mantendo `deliveredAt` vazio. Repetir o mesmo status não duplica eventos nem muda a data de conclusão; repetir `FAILED` exige manter o motivo já registrado. Transições inválidas retornam 409. As alterações de entrega, pedido e respectivos históricos ocorrem em uma transação, serializada pelo pedido para evitar concorrência com cancelamento ou exclusão.
+
+O entregador não pode criar, excluir ou reatribuir entregas. Campos como `orderId`, endereço, `trackingCode`, datas e proprietário são gerados pelo sistema e rejeitados em atualizações. Tipos inválidos, campos extras, UUID inválido e ausência de motivo em falha retornam 400; operação exclusiva de atendente retorna 403 para entregador.
+
+DELETE em `OUT_FOR_DELIVERY` é bloqueado (409). Antes da saída, DELETE marca a entrega como excluída e `FAILED`, registra motivo de cancelamento e cancela o pedido, preservando o histórico. Em `DELIVERED`/`FAILED`, apenas marca exclusão lógica, preservando o resultado do pedido. Para cancelar um pedido com entrega atribuída antes da saída, exclua a entrega: esse fluxo cancela ambos. O PATCH de pedido não cancela diretamente uma entrega ativa.
+
+Verificação local da etapa 6: 145 respostas HTTP conferidas, incluindo permissões de dois atendentes e dois entregadores, atribuição a usuário inativo, reatribuição e perda de acesso, endereço histórico, filtros, estados e conclusão/falha, exclusão lógica, concorrência de criação 1:1 e conclusão idempotente. Uma falha controlada ao gravar o histórico confirmou rollback integral de entrega, pedido e eventos; a restrição temporária foi removida. Sem novas dependências, migrações ou suíte automatizada. O banco utilizado é descartável e não configura a publicação em nuvem.
+
+## Rastreamento público
+
+O frontend é um projeto separado. Este backend fornece apenas a consulta pública por `trackingCode`, sem cadastro ou autenticação do cliente; não serve páginas, formulários ou assets de interface.
+
+O endpoint público é `GET /public/tracking/:trackingCode`. Use o código UUID v4 da entrega, não o ID interno do pedido ou da entrega. Códigos em maiúsculas também são aceitos. Não há listagem pública, criação ou atualização por essa rota.
+
+```json
+{
+  "tracking": {
+    "trackingCode": "123e4567-e89b-42d3-a456-426614174000",
+    "status": "ASSIGNED",
+    "createdAt": "2026-11-26T15:00:00.000Z",
+    "deliveredAt": null,
+    "history": [
+      { "status": "ASSIGNED", "changedAt": "2026-11-26T15:00:00.000Z" }
+    ]
+  }
+}
+```
+
+A consulta usa uma seleção explícita no banco: retorna somente `trackingCode`, `status`, `createdAt`, `deliveredAt` e `history` com `status`/`changedAt`. Nome, telefone, endereço, produtos, valores, notas internas, motivo detalhado de falha, contas e IDs internos não são consultados nem retornados. O histórico público omite eventos repetidos consecutivos de atribuição; informações internas de reatribuição não aparecem. A situação `FAILED` é apresentada como “Entrega não concluída”, orientando contato com o comércio sem expor a observação interna.
+
+Código malformado retorna 400. Código inexistente, ID interno usado como código, entrega excluída ou pedido excluído retorna 404. Consultas válidas retornam 200. As respostas são marcadas `Cache-Control: no-store`. Rotas operacionais continuam exigindo login.
+
+Há limite de **30 consultas por endereço IP a cada janela de 60 segundos**, incluindo códigos inválidos e inexistentes; a tentativa excedente retorna 429 e `Retry-After` em segundos. Os cabeçalhos `X-RateLimit-Limit` e `X-RateLimit-Remaining` informam o limite e o saldo. A contagem é atômica e compartilhada pelo PostgreSQL, inclusive entre processos e instâncias; não depende de memória local. A tabela técnica `TrackingRateLimit` armazena somente uma chave HMAC do IP, contagem e expiração. A janela, o tempo de espera e a limpeza de registros expirados há mais de um dia usam o relógio do banco. A limpeza acontece na primeira consulta de cada janela ativa.
+
+Na execução local, cabeçalhos de IP enviados pelo cliente são ignorados. Em ambiente Vercel (`VERCEL=1`), é usado o IP válido do `X-Forwarded-For` definido pela plataforma, conforme sua [documentação de cabeçalhos](https://vercel.com/docs/headers/request-headers). IPv4 e sua forma mapeada em IPv6 compartilham a mesma chave. A identificação atrás de outros proxies deve ser adaptada ao ambiente confiável antes de publicar fora da Vercel.
+
+Após atualizar, execute `npm run db:deploy` e `npm run db:generate` para aplicar a migração da tabela técnica e atualizar o cliente. Verificações da etapa 7: consulta sem login, campos permitidos, códigos inválidos/inexistentes, ausência de listagem, exclusão lógica e proteção das rotas internas; 40 consultas concorrentes resultaram em 30 permitidas e 10 bloqueadas; outro processo respeitou a mesma cota; expiração e limpeza foram confirmadas. Nenhuma suíte automatizada foi adicionada. As rotas `/`, `/tracking` e os antigos assets de interface não são disponibilizados e retornam 404 em JSON.
 
 ## Referências
 
