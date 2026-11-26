@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ATTENDANT
+  COURIER
+}
+
+enum OrderStatus {
+  RECEIVED
+  PREPARING
+  READY
+  IN_DELIVERY
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  ASSIGNED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+}
+
+model User {
+  id           String          @id @default(uuid()) @db.Uuid
+  name         String          @db.VarChar(120)
+  email        String          @unique @db.VarChar(254)
+  passwordHash String
+  role         Role
+  active       Boolean         @default(true)
+  createdAt    DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
+  customers    Customer[]
+  products     Product[]
+  orders       Order[]
+  deliveries   Delivery[]
+  history      StatusHistory[]
+  sessions     Session[]
+}
+
+model Session {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  expiresAt DateTime  @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Customer {
+  id           String    @id @default(uuid()) @db.Uuid
+  createdById  String    @db.Uuid
+  name         String    @db.VarChar(120)
+  phone        String    @db.VarChar(30)
+  street       String    @db.VarChar(200)
+  number       String    @db.VarChar(30)
+  complement   String?   @db.VarChar(200)
+  neighborhood String    @db.VarChar(120)
+  city         String    @db.VarChar(120)
+  reference    String?   @db.VarChar(300)
+  deletedAt    DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+  createdBy    User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  orders       Order[]
+
+  @@index([createdById, deletedAt])
+}
+
+model Product {
+  id          String      @id @default(uuid()) @db.Uuid
+  createdById String      @db.Uuid
+  name        String      @db.VarChar(120)
+  description String?     @db.VarChar(1000)
+  price       Decimal     @db.Decimal(12, 2)
+  active      Boolean     @default(true)
+  deletedAt   DateTime?   @db.Timestamptz(3)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(3)
+  createdBy   User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items       OrderItem[]
+
+  @@index([createdById, deletedAt])
+}
+
+model Order {
+  id          String          @id @default(uuid()) @db.Uuid
+  customerId  String          @db.Uuid
+  createdById String          @db.Uuid
+  status      OrderStatus     @default(RECEIVED)
+  notes       String?         @db.VarChar(1000)
+  deletedAt   DateTime?       @db.Timestamptz(3)
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+  customer    Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy   User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items       OrderItem[]
+  delivery    Delivery?
+  history     StatusHistory[]
+
+  @@index([customerId])
+  @@index([createdById, deletedAt, status, createdAt])
+}
+
+model OrderItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  orderId   String  @db.Uuid
+  productId String  @db.Uuid
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, productId])
+  @@index([productId])
+}
+
+model Delivery {
+  id              String          @id @default(uuid()) @db.Uuid
+  trackingCode    String          @unique @default(uuid()) @db.Uuid
+  orderId         String          @unique @db.Uuid
+  courierId       String?         @db.Uuid
+  addressSnapshot Json
+  status          DeliveryStatus  @default(ASSIGNED)
+  assignedAt      DateTime?       @db.Timestamptz(3)
+  deliveredAt     DateTime?       @db.Timestamptz(3)
+  failureNote     String?         @db.VarChar(1000)
+  deletedAt       DateTime?       @db.Timestamptz(3)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  courier         User?           @relation(fields: [courierId], references: [id], onDelete: Restrict)
+  history         StatusHistory[]
+
+  @@index([courierId, deletedAt, status])
+}
+
+model StatusHistory {
+  id             String          @id @default(uuid()) @db.Uuid
+  orderId        String          @db.Uuid
+  deliveryId     String?         @db.Uuid
+  changedById    String          @db.Uuid
+  orderStatus    OrderStatus?
+  deliveryStatus DeliveryStatus?
+  note           String?         @db.VarChar(1000)
+  changedAt      DateTime        @default(now()) @db.Timestamptz(3)
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  delivery       Delivery?       @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  changedBy      User            @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([orderId, changedAt])
+  @@index([deliveryId])
+  @@index([changedById])
+}
