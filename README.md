@@ -2,7 +2,7 @@
 
 API de pedidos e entregas locais, com atendentes e entregadores autenticados e rastreamento público para clientes sem cadastro.
 
-Projeto em desenvolvimento: base Express implementada e verificada por HTTP local em 26/11/2026. A persistência Prisma/PostgreSQL e a migração inicial também foram implementadas e verificadas em banco local descartável. Cadastro, login, logout e gerenciamento da própria conta foram implementados e verificados por HTTP com PostgreSQL local. CRUD HTTP de contatos de destinatários e produtos também está implementado e verificado. Pedidos, entregas, rastreamento e Swagger ainda não estão implementados.
+Projeto em desenvolvimento: base Express implementada e verificada por HTTP local em 26/11/2026. A persistência Prisma/PostgreSQL e a migração inicial também foram implementadas e verificadas em banco local descartável. Cadastro, login, logout e gerenciamento da própria conta foram implementados e verificados por HTTP com PostgreSQL local. CRUD HTTP de contatos de destinatários e produtos também está implementado e verificado. Pedidos e itens, totais, histórico de status e relacionamentos por URLs compostas também estão implementados e verificados. Entregas, rastreamento e Swagger ainda não estão implementados.
 
 ## Desenvolvimento
 
@@ -25,7 +25,7 @@ Se Node.js/npm estiverem instalados via NVM, ative o ambiente antes de executar 
 
 `npm start` inicia sem observação de arquivos. `PORT` define a porta local, com padrão 3000. `DATABASE_URL` configura o PostgreSQL; `JWT_SECRET` assina os tokens. `JWT_TTL_SECONDS` define sua duração, com padrão de 3600 segundos e intervalo permitido de 60 a 86400. Seus valores não devem ser versionados. As versões resolvidas estão registradas no `package-lock.json`.
 
-As rotas de autenticação, conta própria, contatos e produtos estão disponíveis abaixo. Rotas ainda não implementadas retornam 404 em JSON.
+As rotas de autenticação, conta própria, contatos, produtos, pedidos e itens estão disponíveis abaixo. Rotas ainda não implementadas retornam 404 em JSON.
 
 ## Persistência
 
@@ -35,11 +35,11 @@ As rotas de autenticação, conta própria, contatos e produtos estão disponív
 - `npm run db:status`: consulta o estado das migrações.
 - `npm run db:migrate -- --name nome_da_alteracao`: cria novas migrações em desenvolvimento; requer permissão para o banco auxiliar (shadow database). Não usar em produção.
 
-O esquema contém sete entidades de negócio e `Session`. Valores monetários usam `Decimal(12,2)`; o total do pedido será calculado pelos itens nos serviços. `deletedAt` permite exclusão lógica de clientes, produtos, pedidos e entregas; usuários são desativados com `active`. O vínculo único entre pedido e entrega permanece após exclusão lógica. O histórico distingue eventos do pedido e da entrega por campos tipados. Notas internas não serão retornadas pela consulta pública.
+O esquema contém sete entidades de negócio e `Session`. Valores monetários usam `Decimal(12,2)`; o total do pedido é calculado pelos itens nos serviços, sem receber valores do cliente. `deletedAt` permite exclusão lógica de clientes, produtos, pedidos e entregas; usuários são desativados com `active`. O vínculo único entre pedido e entrega permanece após exclusão lógica. O histórico distingue eventos do pedido e da entrega por campos tipados. Notas internas não serão retornadas pela consulta pública.
 
-A migração inclui restrições SQL para preços não negativos, quantidades positivas, expiração de sessão posterior à criação e consistência do tipo de evento no histórico. Conta própria, contatos e produtos já possuem autenticação e isolamento por usuário. Permissões de pedidos e entregas, transições e cópias históricas serão implementadas nas próximas etapas; o esquema isoladamente não implementa essas regras.
+A migração inclui restrições SQL para preços não negativos, quantidades positivas, expiração de sessão posterior à criação e consistência do tipo de evento no histórico. Conta própria, contatos, produtos e pedidos já possuem autenticação e isolamento por usuário. Pedidos possuem transições validadas e preços históricos nos itens. Permissões de entregas e endereço histórico serão implementados na próxima etapa; o esquema isoladamente não implementa essas regras.
 
-A conexão compartilhada está em `src/config/database.js`; os serviços de autenticação, contatos e produtos já a utilizam. Não é necessário publicar um endpoint público de banco. O PostgreSQL usado na verificação foi temporário e não é a configuração de desenvolvimento ou de produção da equipe.
+A conexão compartilhada está em `src/config/database.js`; os serviços de autenticação, contatos, produtos e pedidos já a utilizam. Não é necessário publicar um endpoint público de banco. O PostgreSQL usado na verificação foi temporário e não é a configuração de desenvolvimento ou de produção da equipe.
 
 Prisma e seu adaptador PostgreSQL estão fixados na mesma versão. O override `effect: 3.22.5` corrige uma vulnerabilidade transitiva do CLI. A configuração JavaScript segue a [documentação do Prisma](https://www.prisma.io/docs/orm/v7/reference/prisma-config-reference).
 
@@ -104,9 +104,52 @@ Produto: criação exige `name` (2 a 120 caracteres) e `price`. `description` é
 
 PATCH aceita um ou mais dos mesmos campos, mantendo os demais valores. Campos extras são rejeitados, inclusive `id`, `createdById`, `deletedAt` e datas de auditoria. Corpo vazio, tipos ou limites inválidos retornam 400.
 
-DELETE faz exclusão lógica (`deletedAt`), preservando os registros vinculados e os preços históricos de itens. No produto também define `active=false`. Um registro excluído deixa de aparecer nas consultas e não pode ser editado, restaurado ou excluído novamente pela API. Um produto apenas inativo continua visível ao dono e pode ser reativado por PATCH. A proibição de usar produtos inativos ou excluídos em novos pedidos será integrada na etapa de pedidos.
+DELETE faz exclusão lógica (`deletedAt`), preservando os registros vinculados e os preços históricos de itens. No produto também define `active=false`. Um registro excluído deixa de aparecer nas consultas e não pode ser editado, restaurado ou excluído novamente pela API. Um produto apenas inativo continua visível ao dono e pode ser reativado por PATCH. Produtos inativos ou excluídos não podem ser incluídos em pedidos. Alterações de quantidade também exigem produto ativo; a remoção de um item indisponível é permitida enquanto o pedido aceitar edição e mantiver outro item.
 
 Verificação local da etapa 4: 143 respostas HTTP conferidas em PostgreSQL temporário, incluindo CRUD, isolamento entre dois atendentes, bloqueio de dois entregadores, validações, exclusão de registros vinculados e sessão revogada. Nenhuma suíte automatizada foi adicionada. Não foram necessárias novas dependências nem alterações no esquema do banco.
+
+## Pedidos, itens e relacionamentos
+
+As rotas exigem sessão de atendente e limitam o acesso aos próprios pedidos. Entregadores recebem 403, sessão inválida recebe 401, e recurso inexistente/alheio/excluído recebe 404. O item deve pertencer ao pedido da URL; trocar o ID do pedido não permite acessar um item de outro pedido.
+
+| Método | Rota | Comportamento |
+|---|---|---|
+| POST | `/orders` | Cria pedido com contato e itens, retorna 201 com `order` |
+| GET | `/orders` | Lista pedidos, retorna `orders` |
+| GET | `/orders/:orderId` | Consulta `order`, incluindo itens, total e histórico |
+| PATCH | `/orders/:orderId` | Atualiza `notes` e/ou `status`, retorna `order` |
+| DELETE | `/orders/:orderId` | Exclui logicamente, retorna 204 |
+| GET | `/customers/:customerId/orders` | Lista pedidos do contato próprio não excluído |
+| POST | `/customers/:customerId/orders` | Cria pedido para o contato da URL; omitir `customerId` do corpo |
+| GET | `/orders/:orderId/items` | Lista `items` |
+| POST | `/orders/:orderId/items` | Adiciona item, retorna 201 com `item` e `total` |
+| GET | `/orders/:orderId/items/:itemId` | Consulta `item` |
+| PATCH | `/orders/:orderId/items/:itemId` | Altera somente `quantity`, retorna `item` e `total` |
+| DELETE | `/orders/:orderId/items/:itemId` | Remove item, retorna 204 |
+
+Exemplo de criação por `/orders`:
+
+```json
+{
+  "customerId": "UUID_DO_CONTATO",
+  "notes": "Observação opcional",
+  "items": [
+    { "productId": "UUID_DO_PRODUTO", "quantity": 2 }
+  ]
+}
+```
+
+Um pedido contém de 1 a 100 produtos distintos; cada quantidade é um número inteiro JSON entre 1 e 10000. O contato e os produtos precisam pertencer ao atendente e não estar excluídos; produtos também devem estar ativos. Produtos repetidos no corpo são rejeitados (400); adicionar novamente um produto existente retorna 409. Não é possível remover o último item (409). Não há substituição do contato do pedido ou do produto de um item por PATCH.
+
+O backend copia `price` para `unitPrice` na inclusão e calcula `subtotal` e `total` com aritmética decimal; respostas monetárias são textos com duas casas. Alterar preço do catálogo ou quantidade do item não altera o preço histórico já copiado. O corpo não aceita `total`, `unitPrice`, proprietário, status inicial, datas nem campos extras. Criação de pedido/itens/histórico e alterações de status são transacionais; as mutações de um mesmo pedido são serializadas no banco.
+
+Itens e observações só podem ser editados em `RECEIVED` ou `PREPARING`. Notas aceitam texto de até 1000 caracteres ou `null`. O fluxo manual nesta etapa é `RECEIVED → PREPARING → READY`; esses três estados também permitem cancelamento para `CANCELLED`, desde que não exista entrega não excluída vinculada. Estados inválidos no corpo retornam 400; transições não permitidas ou edição fora dos estados previstos retornam 409. Repetir o status atual não duplica o histórico. `IN_DELIVERY` e `COMPLETED` serão controlados pelo serviço de entregas; não é possível forçá-los pelo PATCH de pedido.
+
+Criação registra um evento `RECEIVED`. Cada mudança de estado registra novo evento, autor e data, retornados em `order.history`. DELETE preserva itens e histórico, marca `deletedAt` e cancela pedidos ainda não concluídos, registrando o cancelamento se necessário. Pedidos em entrega ou com entrega não excluída vinculada não podem ser excluídos nesta etapa (409). Pedidos excluídos desaparecem das consultas e não podem ser editados. Excluir um contato não apaga seus pedidos, que continuam disponíveis por `/orders`; a rota composta exige contato não excluído.
+
+GET `/orders` e GET `/customers/:customerId/orders` aceitam `status`, `from` e `to`. Datas filtram `createdAt`, com limites inclusivos e timestamp ISO 8601 contendo fuso, como `2026-11-26T00:00:00Z`. A data final não pode ser anterior à inicial. A listagem é ordenada por criação decrescente e ID em caso de empate, sem paginação nesta versão.
+
+Verificação local da etapa 5: 151 respostas HTTP no fluxo principal, além de verificações dos limites monetários e rollback. Confirmados preços históricos, totais após alterações, transições, filtros, isolamento, produtos indisponíveis, exclusão lógica e proteção contra duas remoções simultâneas do último item. Uma falha controlada de gravação no banco descartável confirmou rollback integral de pedido, itens e histórico; a restrição temporária foi removida após a verificação. Não houve alteração de migrações ou dependências nem criação de suíte automatizada.
 
 ## Referências
 
