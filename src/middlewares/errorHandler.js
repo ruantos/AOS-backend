@@ -21,6 +21,10 @@ export function errorHandler(error, req, res, next) {
     return res.status(error.status).json({ error: { code: error.code, message: error.message } });
   }
 
+  if (error.code === 'P2025') {
+    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Registro não encontrado.' } });
+  }
+
   if (error.code === 'P2002') {
     return res.status(409).json({ error: { code: 'CONFLICT', message: 'Já existe um registro com esses dados únicos.' } });
   }
