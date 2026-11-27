@@ -5,7 +5,7 @@ import { authConfig } from '../config/auth.js';
 
 function clientAddress(req) {
   const forwarded = process.env.VERCEL === '1' ? req.get('x-forwarded-for')?.trim() : undefined;
-  const address = forwarded && isIP(forwarded) ? forwarded : req.socket.remoteAddress;
+  const address = process.env.RENDER === 'true' ? req.ip : (forwarded && isIP(forwarded) ? forwarded : req.socket.remoteAddress);
   if (!address) return 'unknown';
   if (isIP(address) === 6) {
     const canonical = new URL(`http://[${address.split('%')[0]}]/`).hostname.toLowerCase();

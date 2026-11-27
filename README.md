@@ -325,6 +325,34 @@ Use o ambiente de exemplo vazio para compartilhar ou entregar. Exportações loc
 
 Verificação da etapa 9 em PostgreSQL descartável: seed executado duas vezes com os mesmos registros e comparado integralmente, sem duplicatas ou mudanças de hashes/datas/códigos; alterações de produto e exclusão lógica preservadas em nova execução; senhas ausentes/inválidas não gravam dados. Confirmados os mínimos das sete entidades e os relacionamentos. A coleção foi executada duas vezes via Newman, totalizando **234 respostas com status esperado**, captura de variáveis, dados do seed preservados e todas as sessões revogadas. Senha contendo aspas, barra e UTF-8 funcionou na interpolação JSON. Arquivos de entrega continuam sem credenciais ou tokens. Newman foi usado somente em `/tmp`, sem dependência ou tarefa de testes no projeto.
 
+## Publicação no Render com Neon
+
+O repositório contém `render.yaml` para um Web Service Node no plano Free e `.node-version` fixando a versão validada localmente. O PostgreSQL permanece no Neon; não é necessário criar outro banco no Render. O enunciado acadêmico original solicita Vercel; esta opção de hospedagem no Render foi preparada a pedido do usuário.
+
+No painel do Render, crie **New → Blueprint**, conecte o GitHub e selecione `ruantos/AOS-backend`, branch `main`. O Render lê o `render.yaml`, solicita `DATABASE_URL` e gera um `JWT_SECRET` próprio. Use a URL direta do Neon já validada, mantendo SSL e `connect_timeout=15`. Não compartilhe ou versione os valores do `.env`.
+
+Se preferir **New → Web Service**, configure:
+
+| Campo | Valor |
+|---|---|
+| Repositório / branch | `ruantos/AOS-backend` / `main` |
+| Runtime | Node |
+| Root Directory | Vazio (raiz do repositório) |
+| Build Command | `npm ci --include=dev && npm run db:generate && npm run db:deploy` |
+| Start Command | `npm start` |
+| Instance Type | Free, para a demonstração |
+| Health Check Path | Vazio; usar a verificação TCP padrão |
+
+Variáveis obrigatórias: `NODE_ENV=production`, `DATABASE_URL` com a conexão Neon e `JWT_SECRET` com pelo menos 32 bytes aleatórios. `JWT_TTL_SECONDS=3600` é opcional. Na criação manual, gere `JWT_SECRET` no Render ou use o valor local sem publicá-lo. Não defina `VERCEL` no Render. O serviço define `PORT` e `RENDER` automaticamente.
+
+O build instala também o CLI Prisma, gera o cliente e aplica somente migrações pendentes. A migração é executada no build para permitir o plano gratuito, sem depender de pre-deploy pago. O seed já aplicado no Neon não é executado automaticamente; `SEED_PASSWORD` não é necessário no serviço em execução. O servidor escuta em `0.0.0.0` e utiliza a porta definida pelo Render.
+
+No ambiente Render, o Express confia em um salto de proxy e o limitador usa `req.ip`, extraindo o IP do último salto de `X-Forwarded-For`. Na execução local, continua ignorando cabeçalhos de IP enviados pelo cliente; o comportamento já existente para Vercel é preservado. A contagem permanece compartilhada no PostgreSQL.
+
+Após o status **Live**, configure o `baseUrl` do Postman com a URL HTTPS `https://NOME_DO_SERVICO.onrender.com`, sem barra final, e faça login com as contas e a senha do seed. A raiz `/` retorna 404 porque não há frontend; `/api-docs/` sem sessão retorna 401. Esses retornos não indicam falha de publicação. O Swagger usa cookie Secure em produção e deve ser acessado por HTTPS após login na mesma origem, conforme as instruções da seção OpenAPI.
+
+A configuração local pronta não significa que o serviço já foi criado no Render. A publicação e a verificação na URL pública dependem da criação no painel e dos valores secretos configurados pelo proprietário. Referências: [Web Services](https://render.com/docs/web-services), [variáveis de ambiente](https://render.com/docs/configure-environment-variables).
+
 ## Referências
 
 - [Escopo](docs/Escopo.md)

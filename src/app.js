@@ -12,6 +12,7 @@ import { errorHandler, notFound } from './middlewares/errorHandler.js';
 const app = express();
 
 app.disable('x-powered-by');
+if (process.env.RENDER === 'true') app.set('trust proxy', 1);
 app.use(express.json({ limit: '100kb' }));
 app.use('/api-docs', docsRoutes);
 app.use(trackingRoutes);
