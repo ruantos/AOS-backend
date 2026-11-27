@@ -1,6 +1,12 @@
 import app from './app.js';
 import { env } from './config/env.js';
 
-app.listen(env.port, '0.0.0.0', () => {
-  console.log(`Recife Express ouvindo na porta ${env.port}`);
+try {
+
+  app.listen(env.port, '0.0.0.0', () => {
+  console.log(`Servidor em execução: ${env.port}`);
 });
+} catch (error) {
+  console.log("Erro ao inicializar o servidor: " + error)
+}
+
