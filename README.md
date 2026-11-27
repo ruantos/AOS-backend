@@ -2,7 +2,7 @@
 
 API de pedidos e entregas locais, com atendentes e entregadores autenticados e rastreamento público para clientes sem cadastro.
 
-Projeto em desenvolvimento. Implementados e verificados em PostgreSQL local: base Express, persistência, autenticação, conta própria, CRUD de contatos/produtos/pedidos/entregas, itens, histórico e URLs compostas. O endpoint público de rastreamento está implementado e verificado por HTTP. Este repositório contém somente o backend. Swagger, seed, coleção Postman e publicação ainda estão pendentes.
+Projeto em desenvolvimento. Implementados e verificados em PostgreSQL local: base Express, persistência, autenticação, conta própria, CRUD de contatos/produtos/pedidos/entregas, itens, histórico e URLs compostas. O endpoint público de rastreamento está implementado e verificado por HTTP. Este repositório contém somente o backend. OpenAPI e Swagger UI autenticados também estão implementados. Seed repetível e coleção/ambiente Postman também estão implementados e verificados. Publicação e entregáveis finais ainda estão pendentes.
 
 ## Desenvolvimento
 
@@ -54,7 +54,7 @@ Prisma e seu adaptador PostgreSQL estão fixados na mesma versão. O override `e
 | PATCH | `/users/me` | Bearer; altera um ou mais campos: `name`, `email`, `password` |
 | DELETE | `/users/me` | Bearer; desativa a própria conta e revoga suas sessões, retorna 204 |
 
-Cadastro retorna 201 com `user`; não faz login automaticamente. Login retorna `accessToken`, `tokenType`, `expiresAt` e `user`. Use o token no cabeçalho `Authorization: Bearer <accessToken>` das chamadas protegidas. Nenhuma resposta contém hash ou senha. E-mails são armazenados em minúsculas, sem espaços nas extremidades; nomes têm entre 2 e 120 caracteres. Senhas têm pelo menos 8 caracteres e no máximo 72 bytes em UTF-8, sem remoção de espaços ou truncamento.
+Cadastro retorna 201 com `user`; não faz login automaticamente. Login retorna `accessToken`, `tokenType`, `expiresAt` e `user`, e define um cookie HttpOnly exclusivo da documentação (`Path=/api-docs`). Esse cookie não autentica as rotas de negócio. Use o token no cabeçalho `Authorization: Bearer <accessToken>` das chamadas protegidas. Nenhuma resposta contém hash ou senha. E-mails são armazenados em minúsculas, sem espaços nas extremidades; nomes têm entre 2 e 120 caracteres. Senhas têm pelo menos 8 caracteres e no máximo 72 bytes em UTF-8, sem remoção de espaços ou truncamento.
 
 A assinatura JWT usa HS256, emissor/audiência fixos, expiração e identificador de sessão. O middleware consulta sessão e conta ativa no PostgreSQL a cada chamada protegida. Logout invalida o token no servidor; outras sessões da mesma conta permanecem válidas. Trocar a senha revoga todas as sessões, inclusive a atual: faça novo login. Desativação impede login e revoga todas as sessões. Não há reativação pública nem troca de perfil por atualização.
 
@@ -192,7 +192,7 @@ Verificação local da etapa 6: 145 respostas HTTP conferidas, incluindo permiss
 
 ## Rastreamento público
 
-O frontend é um projeto separado. Este backend fornece apenas a consulta pública por `trackingCode`, sem cadastro ou autenticação do cliente; não serve páginas, formulários ou assets de interface.
+O frontend é um projeto separado. Este backend fornece apenas a consulta pública por `trackingCode`, sem cadastro ou autenticação do cliente; não serve interface de cliente. A única interface técnica é o Swagger UI exigido para documentar a API.
 
 O endpoint público é `GET /public/tracking/:trackingCode`. Use o código UUID v4 da entrega, não o ID interno do pedido ou da entrega. Códigos em maiúsculas também são aceitos. Não há listagem pública, criação ou atualização por essa rota.
 
@@ -219,6 +219,111 @@ Há limite de **30 consultas por endereço IP a cada janela de 60 segundos**, in
 Na execução local, cabeçalhos de IP enviados pelo cliente são ignorados. Em ambiente Vercel (`VERCEL=1`), é usado o IP válido do `X-Forwarded-For` definido pela plataforma, conforme sua [documentação de cabeçalhos](https://vercel.com/docs/headers/request-headers). IPv4 e sua forma mapeada em IPv6 compartilham a mesma chave. A identificação atrás de outros proxies deve ser adaptada ao ambiente confiável antes de publicar fora da Vercel.
 
 Após atualizar, execute `npm run db:deploy` e `npm run db:generate` para aplicar a migração da tabela técnica e atualizar o cliente. Verificações da etapa 7: consulta sem login, campos permitidos, códigos inválidos/inexistentes, ausência de listagem, exclusão lógica e proteção das rotas internas; 40 consultas concorrentes resultaram em 30 permitidas e 10 bloqueadas; outro processo respeitou a mesma cota; expiração e limpeza foram confirmadas. Nenhuma suíte automatizada foi adicionada. As rotas `/`, `/tracking` e os antigos assets de interface não são disponibilizados e retornam 404 em JSON.
+
+## OpenAPI e Swagger UI
+
+- `/api-docs/`: interface técnica padrão Swagger UI, protegida por sessão válida.
+- `/api-docs/openapi.json`: esquema OpenAPI 3.0.3 protegido pela mesma autenticação.
+- Todos os arquivos em `/api-docs`, incluindo CSS, JavaScript, inicialização e ícones, exigem autenticação antes de serem servidos. A ausência de sessão ou token inválido/expirado/revogado retorna 401, inclusive quando o navegador já possui arquivos em cache.
+
+O esquema cobre as 38 operações de negócio e as duas rotas de documentação: autenticação, conta própria, CRUD, relacionamentos por URLs compostas, entregas e rastreamento público. Contém campos obrigatórios, tipos, limites, exemplos fictícios, respostas, erros, permissões, regras de status, transações e exclusão lógica. As URLs usam a mesma origem da API, funcionando localmente e após publicação.
+
+A documentação aceita `Authorization: Bearer <accessToken>` ou o cookie `recifeDocs`, emitido pelo login. Esse cookie contém o JWT da mesma sessão, é HttpOnly, SameSite=Strict, expira junto com o token e fica restrito a `/api-docs`; em produção também usa Secure, exigindo HTTPS. Somente a documentação aceita esse cookie. Logout revoga a sessão e remove o cookie; troca de senha e desativação também invalidam o acesso. Os dois perfis podem consultar a documentação, mantendo as permissões originais nas operações da API.
+
+Para abrir no navegador, faça login **no próprio navegador e na mesma origem da API**. Postman e navegador não compartilham cookies. Em desenvolvimento, abra `http://localhost:3000/` (a raiz retorna 404 JSON, pois não existe página da aplicação), abra o console do navegador e execute o exemplo abaixo substituindo as credenciais pelas de uma conta cadastrada:
+
+```javascript
+const resposta = await fetch('/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email: 'seu.email@example.com', password: 'SUA_SENHA' })
+});
+const sessao = await resposta.json();
+if (!resposta.ok) throw new Error(sessao.error.message);
+console.log(sessao.accessToken);
+location.assign('/api-docs/');
+```
+
+O navegador envia o cookie automaticamente para carregar interface, esquema e arquivos. Para executar rotas protegidas em **Try it out**, clique em **Authorize** e preencha **bearerAuth** somente com o `accessToken`, sem o prefixo `Bearer`. Não preencha `docsCookie`: ele já foi definido pelo servidor e é HttpOnly. Se precisar obter outro token, execute o login documentado no próprio Swagger. A autorização Bearer não é salva no localStorage e precisa ser informada novamente após recarregar a página. As rotas públicas permanecem sem autenticação.
+
+Para consultar somente o esquema por um cliente HTTP, basta chamar `/api-docs/openapi.json` com Bearer, sem usar cookie. O documento pode ser importado por ferramentas que aceitem OpenAPI; a coleção Postman própria do projeto está em `postman/RecifeExpress.postman_collection.json`.
+
+A configuração desativa o validador remoto do Swagger: esquema e interface usam apenas recursos locais. O arquivo de definição está em `src/config/openapi.js`, sem comentários de documentação no código-fonte. Não há frontend de cliente nem formulário de login próprio no repositório. A integração segue a [documentação do Swagger UI Express](https://github.com/scottie1984/swagger-ui-express).
+
+Verificação da etapa 8: OpenAPI validado com referências resolvidas e 40 IDs de operação únicos. Conferidas 58 respostas HTTP para esquema, interface, arquivos, ambos os perfis, token inválido/expirado/revogado, ausência de sessão, logout, troca de senha, desativação e atributos do cookie. O cookie isoladamente não autentica a API, e parâmetros de URL ou cabeçalhos de cache não contornam o acesso à documentação. No Chromium, interface e esquema carregaram sem erros de JavaScript ou requisições externas; Try it out rejeitou API sem Bearer (401) e permitiu consultar conta (200) e criar produto (201) após Authorize. Logout bloqueou novamente interface e arquivos. As dependências instaladas não apresentaram vulnerabilidades na auditoria npm. Ferramentas de verificação ficaram em `/tmp`, sem suíte automatizada adicionada ao projeto.
+
+## Seed de demonstração
+
+Defina `DATABASE_URL` e `SEED_PASSWORD` no `.env`. A senha deve ter pelo menos 8 caracteres e no máximo 72 bytes UTF-8; não existe senha padrão no código. Depois execute:
+
+```bash
+npm run db:deploy
+npm run db:generate
+npm run db:seed
+```
+
+O comando usa `prisma/seed.js`, registrado em `prisma.config.js`. Cria dados fictícios em uma transação e pode ser repetido: IDs estáveis e upserts preservam registros existentes, alterações feitas pela API, exclusões lógicas, preços históricos, códigos de rastreamento e hashes de senha. Reexecutar com outra `SEED_PASSWORD` não redefine as senhas das contas existentes. Use a senha configurada na primeira execução para entrar nessas contas. Conflito de e-mail com conta de outro ID ou perfil incompatível interrompe o seed sem aplicar a transação.
+
+| Perfil | E-mail de demonstração |
+|---|---|
+| Atendente 1 | `atendente1@example.com` |
+| Atendente 2 | `atendente2@example.com` |
+| Entregador 1 | `entregador1@example.com` |
+| Entregador 2 | `entregador2@example.com` |
+
+Os quatro usuários recebem a senha informada por ambiente somente quando são criados. O seed não imprime senha nem hash. A saída apresenta IDs, e-mails fictícios e códigos públicos para facilitar a demonstração.
+
+| Entidade de negócio | Registros do seed |
+|---|---:|
+| Usuários | 4 — dois de cada perfil |
+| Contatos | 4 — dois por atendente |
+| Produtos | 4 — dois por atendente |
+| Pedidos | 4 — dois por atendente |
+| Itens de pedido | 8 — dois por pedido |
+| Entregas | 4 — uma por pedido |
+| Histórico | 16 — quatro eventos por pedido |
+
+Cada atendente possui dois pedidos para um de seus contatos; ambos os produtos aparecem nesses pedidos, demonstrando 1:N e N:N. Cada entregador recebe duas entregas, demonstrando também o vínculo entregador/entrega; pedidos possuem entrega 1:1 e histórico 1:N. Os pedidos começam em `READY`, com entregas em `ASSIGNED` e eventos anteriores coerentes. Datas e endereços são fictícios. Sessões e cotas de rastreamento são dados técnicos gerados pelo uso da API e não recebem seed.
+
+## Coleção Postman
+
+Importe os dois arquivos:
+
+- [Coleção Recife Express](postman/RecifeExpress.postman_collection.json)
+- [Ambiente de exemplo](postman/RecifeExpress.example.postman_environment.json)
+
+Selecione o ambiente importado, ajuste `baseUrl` para a API sem barra final e preencha **localmente** `password` com a senha das contas do seed. Os e-mails fictícios já estão preenchidos. Senhas e tokens no arquivo versionado estão vazios. Para executar no Postman, use **Run collection** com todas as pastas na ordem apresentada ou envie cada requisição sequencialmente. Comece novamente pela primeira requisição para repetir a demonstração.
+
+| Pasta | Demonstração |
+|---|---|
+| 01 · Cadastro e autenticação | Cadastro temporário, login dos dois perfis, conta própria, credenciais inválidas e duplicidade |
+| 02 · Conferir dados pré-cadastrados | Consulta dos dados do seed e esquema OpenAPI |
+| 03 · CRUD de contatos e produtos | Criação, consulta, listagem e atualização, com registros de outro atendente |
+| 04 · Pedidos e relacionamentos | URLs compostas, criação direta, itens, quantidade, total, preço histórico e filtros |
+| 05 · Acessos indevidos e validação | Isolamento entre usuários, bloqueio de entregadores, validação de campos/produtos e rastreamento inválido |
+| 06 · Entregas e acompanhamento público | Atribuição, reatribuição, perda de acesso, saída, conclusão, falha e consulta pública sem login |
+| 07 · Exclusões e logout | Exclusões lógicas, desativação da conta temporária, logout e rejeição dos tokens revogados |
+
+As 117 requisições têm o status esperado na descrição. Scripts de **Pre-request** preparam os valores da execução; scripts de **Post-response** apenas capturam tokens e IDs nas variáveis, sem `pm.test` ou assertions. O retorno e o status devem ser conferidos no Postman; não se trata de uma suíte automatizada adicionada ao projeto.
+
+| Variáveis | Uso |
+|---|---|
+| `baseUrl`, `password` | Configuração local da API e senha definida no seed |
+| `attendantEmail`, `otherAttendantEmail`, `courierEmail`, `otherCourierEmail` | Contas de demonstração |
+| `attendantToken`, `otherAttendantToken`, `courierToken`, `otherCourierToken` | JWT capturado no login de cada conta |
+| `customerId`, `productId`, `secondProductId`, `orderId`, `itemId`, `deliveryId` | IDs capturados nas criações |
+| `foreignCustomerId`, `foreignProductId`, `foreignOrderId` | Recursos do segundo atendente para demonstrar isolamento |
+| `trackingCode`, `failedTrackingCode` | Códigos públicos capturados nas entregas |
+| `from`, `to` | Período inclusivo usado na listagem de pedidos; ajuste para o período desejado com timestamps UTC |
+| `runId`, `signupEmail` | Valores únicos por execução para cadastro e identificação dos registros temporários |
+
+Cada requisição referencia o token do perfil apropriado; o rastreamento e o cadastro/login usam **No Auth**. Para demonstrar a troca de usuário, observe o campo Bearer da requisição e as variáveis de cada perfil. O roteiro captura valores automaticamente, permitindo mostrar as variáveis no vídeo sem copiar IDs à mão.
+
+A coleção cria uma conta temporária e registros de negócio próprios a cada execução; não modifica os dados de negócio do seed. Ao final, desativa a conta temporária, exclui logicamente seus contatos/produtos/pedidos/entregas e revoga todas as sessões abertas. Os históricos e registros excluídos continuam no PostgreSQL conforme as regras da aplicação. Se interromper o roteiro antes da limpeza, as etapas finais podem ser executadas com as variáveis já capturadas; uma execução nova não remove registros abandonados por execuções anteriores.
+
+Use o ambiente de exemplo vazio para compartilhar ou entregar. Exportações locais com senhas/tokens devem ficar em arquivos como `postman/RecifeExpress.local.json`, ignorados pelo Git; não substitua o exemplo versionado por uma exportação preenchida.
+
+Verificação da etapa 9 em PostgreSQL descartável: seed executado duas vezes com os mesmos registros e comparado integralmente, sem duplicatas ou mudanças de hashes/datas/códigos; alterações de produto e exclusão lógica preservadas em nova execução; senhas ausentes/inválidas não gravam dados. Confirmados os mínimos das sete entidades e os relacionamentos. A coleção foi executada duas vezes via Newman, totalizando **234 respostas com status esperado**, captura de variáveis, dados do seed preservados e todas as sessões revogadas. Senha contendo aspas, barra e UTF-8 funcionou na interpolação JSON. Arquivos de entrega continuam sem credenciais ou tokens. Newman foi usado somente em `/tmp`, sem dependência ou tarefa de testes no projeto.
 
 ## Referências
 

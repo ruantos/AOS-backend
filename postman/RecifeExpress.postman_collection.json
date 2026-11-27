@@ -1,0 +1,3099 @@
+{
+  "info": {
+    "name": "Recife Express — demonstração completa",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Importe também o ambiente example e configure baseUrl/password. Execute o seed antes. Execute as pastas em ordem. Cada descrição informa o status HTTP esperado; scripts de pós-resposta apenas capturam variáveis, sem testes/assertions. A coleção cria registros próprios por execução e os exclui logicamente ao final; não altera os dados de negócio pré-cadastrados. Contas temporárias são desativadas e todas as sessões criadas são encerradas. Para repetir, recomece pela primeira requisição. Senhas e tokens do ambiente versionado estão vazios."
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const password = pm.environment.get('password');",
+          "if (typeof password !== 'string' || password.length < 8) throw new Error('Configure password no ambiente selecionado com o mesmo valor de SEED_PASSWORD.');",
+          "pm.variables.set('passwordJson', JSON.stringify(password));"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 · Cadastro e autenticação",
+      "item": [
+        {
+          "name": "01 Cadastrar conta temporária",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/signup",
+            "description": "Esperado: HTTP 201. Gera e-mail único por execução. Não altera contas do seed.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Conta temporária Postman\",\n  \"email\": \"{{signupEmail}}\",\n  \"password\": {{passwordJson}},\n  \"role\": \"ATTENDANT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('runId', pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.environment.set('signupEmail', 'demo-' + pm.environment.get('runId') + '@example.com');",
+                  "pm.environment.set('wrongPassword', pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.environment.set('unknownTrackingCode', pm.variables.replaceIn('{{$guid}}'));",
+                  "for (const key of ['attendantToken','otherAttendantToken','courierToken','otherCourierToken','signupToken','customerId','foreignCustomerId','productId','secondProductId','inactiveProductId','foreignProductId','orderId','secondOrderId','foreignOrderId','itemId','addedItemId','wrongParentItemId','deliveryId','failedDeliveryId','trackingCode','failedTrackingCode']) pm.environment.unset(key);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"signupUserId\", data.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 Login da conta temporária",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{signupEmail}}\",\n  \"password\": {{passwordJson}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"signupToken\", data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login atendente 1",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Esperado: HTTP 200. Use as contas do seed; o token e o ID são capturados em variáveis.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{attendantEmail}}\",\n  \"password\": {{passwordJson}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"attendantToken\", data.accessToken);",
+                  "  pm.environment.set(\"attendantId\", data.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login atendente 2",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Esperado: HTTP 200. Use as contas do seed; o token e o ID são capturados em variáveis.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{otherAttendantEmail}}\",\n  \"password\": {{passwordJson}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"otherAttendantToken\", data.accessToken);",
+                  "  pm.environment.set(\"otherAttendantId\", data.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login entregador 1",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Esperado: HTTP 200. Use as contas do seed; o token e o ID são capturados em variáveis.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{courierEmail}}\",\n  \"password\": {{passwordJson}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"courierToken\", data.accessToken);",
+                  "  pm.environment.set(\"courierId\", data.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login entregador 2",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Esperado: HTTP 200. Use as contas do seed; o token e o ID são capturados em variáveis.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{otherCourierEmail}}\",\n  \"password\": {{passwordJson}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"otherCourierToken\", data.accessToken);",
+                  "  pm.environment.set(\"otherCourierId\", data.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar conta do atendente",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar conta do entregador",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Senha incorreta",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Esperado: HTTP 401. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{attendantEmail}}\",\n  \"password\": \"{{wrongPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Perfil não permitido",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/signup",
+            "description": "Esperado: HTTP 400. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Perfil inválido\",\n  \"email\": \"{{signupEmail}}\",\n  \"password\": {{passwordJson}},\n  \"role\": \"CUSTOMER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cadastro duplicado",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/signup",
+            "description": "Esperado: HTTP 409. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Duplicado\",\n  \"email\": \"{{signupEmail}}\",\n  \"password\": {{passwordJson}},\n  \"role\": \"ATTENDANT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Sem login",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 401. ",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Conferir dados pré-cadastrados",
+      "item": [
+        {
+          "name": "Listar seed: customers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers",
+            "description": "Esperado: HTTP 200. Confira os registros de demonstração do atendente. Estes pedidos e entregas não serão alterados pela coleção.",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar seed: products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products",
+            "description": "Esperado: HTTP 200. Confira os registros de demonstração do atendente. Estes pedidos e entregas não serão alterados pela coleção.",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar seed: orders",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders",
+            "description": "Esperado: HTTP 200. Confira os registros de demonstração do atendente. Estes pedidos e entregas não serão alterados pela coleção.",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar seed: deliveries",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/deliveries",
+            "description": "Esperado: HTTP 200. Confira os registros de demonstração do atendente. Estes pedidos e entregas não serão alterados pela coleção.",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar esquema OpenAPI",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api-docs/openapi.json",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 · CRUD de contatos e produtos",
+      "item": [
+        {
+          "name": "Criar contato próprio",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/customers",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Destinatário {{runId}}\",\n  \"phone\": \"(81) 00000-0000\",\n  \"street\": \"Rua fictícia\",\n  \"number\": \"10\",\n  \"neighborhood\": \"Centro\",\n  \"city\": \"Recife\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"customerId\", data.customer.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar contatos próprios",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar contato",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers/{{customerId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar contato",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/customers/{{customerId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"city\": \"Olinda\",\n  \"complement\": \"Sala de demonstração\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Criar contato de outro atendente",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/customers",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Outro destinatário {{runId}}\",\n  \"phone\": \"(81) 00000-0000\",\n  \"street\": \"Rua fictícia\",\n  \"number\": \"10\",\n  \"neighborhood\": \"Centro\",\n  \"city\": \"Recife\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"foreignCustomerId\", data.customer.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar produto principal",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/products",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Produto principal {{runId}}\",\n  \"price\": \"10.35\",\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"productId\", data.product.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar segundo produto",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/products",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Segundo produto {{runId}}\",\n  \"price\": \"5.20\",\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"secondProductId\", data.product.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar produto inativo",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/products",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Produto inativo {{runId}}\",\n  \"price\": \"1.00\",\n  \"active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"inactiveProductId\", data.product.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar produto de outro atendente",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/products",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Produto de outro atendente {{runId}}\",\n  \"price\": \"2.00\",\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"foreignProductId\", data.product.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar produtos",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar produto",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products/{{productId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar produto",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/products/{{productId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": \"12.50\",\n  \"description\": \"Preço atualizado antes de registrar o pedido.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 · Pedidos e relacionamentos",
+      "item": [
+        {
+          "name": "Criar pedido pela URL composta",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/customers/{{customerId}}/orders",
+            "description": "Esperado: HTTP 201. Relacionamento contato/pedidos. Total inicial: 25.00; preço histórico: 12.50.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Pedido de demonstração\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"orderId\", data.order.id);",
+                  "  pm.environment.set(\"itemId\", data.order.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar pedidos do contato",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers/{{customerId}}/orders",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar pedidos por status e período",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders?status=RECEIVED&from={{from}}&to={{to}}",
+            "description": "Esperado: HTTP 200. Altere from/to no ambiente para demonstrar os filtros inclusivos de createdAt.",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar pedido",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar itens pela URL composta",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}/items",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar item pela URL composta",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}/items/{{itemId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Adicionar segundo produto",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/orders/{{orderId}}/items",
+            "description": "Esperado: HTTP 201. Relacionamento pedido/produtos via itens. Total: 30.20.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{secondProductId}}\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"addedItemId\", data.item.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Alterar quantidade do item",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}/items/{{itemId}}",
+            "description": "Esperado: HTTP 200. Preserva unitPrice 12.50; total: 42.70.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Alterar preço atual do catálogo",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/products/{{productId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": \"14.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Conferir preço histórico preservado",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 200. O item continua com unitPrice 12.50 e total 42.70, apesar do catálogo em 14.00.",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Remover segundo item",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/orders/{{orderId}}/items/{{addedItemId}}",
+            "description": "Esperado: HTTP 204. Total passa a 37.50. O último item é preservado.",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar total após remover item",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar segundo pedido pela rota direta",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/orders",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    },\n    {\n      \"productId\": \"{{secondProductId}}\",\n      \"quantity\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"secondOrderId\", data.order.id);",
+                  "  pm.environment.set(\"wrongParentItemId\", data.order.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar pedido do outro atendente",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/orders",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{foreignCustomerId}}\",\n  \"items\": [\n    {\n      \"productId\": \"{{foreignProductId}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"foreignOrderId\", data.order.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 · Acessos indevidos e validação",
+      "item": [
+        {
+          "name": "Consultar contato de outro usuário",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers/{{customerId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Editar contato de outro usuário",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/customers/{{customerId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"city\": \"Não deve alterar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Excluir contato de outro usuário",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/customers/{{customerId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Entregador não gerencia produtos",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products",
+            "description": "Esperado: HTTP 403. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Entregador não cria produtos",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/products",
+            "description": "Esperado: HTTP 403. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Não permitido\",\n  \"price\": \"1.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Entregador não acessa pedidos",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders",
+            "description": "Esperado: HTTP 403. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar pedido de outro usuário",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Editar pedido de outro usuário",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Não deve alterar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Item não pertence ao pedido da URL",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}/items/{{wrongParentItemId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Produto inativo em novo pedido",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/orders",
+            "description": "Esperado: HTTP 409. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"items\": [\n    {\n      \"productId\": \"{{inactiveProductId}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Produto de outro usuário em pedido",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/orders",
+            "description": "Esperado: HTTP 404. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"items\": [\n    {\n      \"productId\": \"{{foreignProductId}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Contato de outro usuário em pedido",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/orders",
+            "description": "Esperado: HTTP 404. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{foreignCustomerId}}\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Quantidade inválida",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}/items/{{itemId}}",
+            "description": "Esperado: HTTP 400. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Preço unitário não pode ser imposto",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}/items/{{itemId}}",
+            "description": "Esperado: HTTP 400. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 1,\n  \"unitPrice\": \"0.01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Último item não pode ser removido",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/orders/{{orderId}}/items/{{itemId}}",
+            "description": "Esperado: HTTP 409. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Proprietário não pode ser trocado",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/products/{{productId}}",
+            "description": "Esperado: HTTP 400. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"createdById\": \"{{otherAttendantId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Token inválido não acessa Swagger",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api-docs/openapi.json",
+            "description": "Esperado: HTTP 401. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{wrongPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Código público inexistente",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/public/tracking/{{unknownTrackingCode}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Código público malformado",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/public/tracking/INVALIDO",
+            "description": "Esperado: HTTP 400. ",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 · Entregas e acompanhamento público",
+      "item": [
+        {
+          "name": "Pedido em preparação",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PREPARING\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Atualizar observações do pedido",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Conferido e preparado.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Pedido pronto",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"READY\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Criar entrega pela URL composta",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/orders/{{orderId}}/delivery",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courierId\": \"{{courierId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"deliveryId\", data.delivery.id);",
+                  "  pm.environment.set(\"trackingCode\", data.delivery.trackingCode);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar entregas",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/deliveries",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Consultar entrega pela rota direta",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Entregador consulta entrega atribuída",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}/delivery",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Outro entregador não acessa entrega",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherCourierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Entregador não pode reatribuir",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 403. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courierId\": \"{{otherCourierId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Entregador não pode excluir",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 403. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atendente reatribui antes da saída",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courierId\": \"{{otherCourierId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Antigo responsável perdeu o acesso",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atendente devolve atribuição",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}/delivery",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courierId\": \"{{courierId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cliente consulta pacote sem login",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/public/tracking/{{trackingCode}}",
+            "description": "Esperado: HTTP 200. Somente código, situação, datas e eventos públicos; sem nome, telefone, endereço ou IDs internos.",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Entregador sai para entrega",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{orderId}}/delivery",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"OUT_FOR_DELIVERY\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Pedido em entrega não pode ser excluído",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 409. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Entrega em andamento não pode ser excluída",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 409. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Entregador conclui entrega",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DELIVERED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Pedido foi concluído pela entrega",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 200. Confira status COMPLETED e os eventos com autores/datas.",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cliente acompanha conclusão",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/public/tracking/{{trackingCode}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Listar entregas por situação e responsável",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/deliveries?status=DELIVERED&courierId={{courierId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Segundo pedido PREPARING",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{secondOrderId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PREPARING\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Segundo pedido READY",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/orders/{{secondOrderId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"READY\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Criar entrega pela rota direta",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/deliveries",
+            "description": "Esperado: HTTP 201. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{secondOrderId}}\",\n  \"courierId\": \"{{courierId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set(\"failedDeliveryId\", data.delivery.id);",
+                  "  pm.environment.set(\"failedTrackingCode\", data.delivery.trackingCode);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar falha com motivo",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/deliveries/{{failedDeliveryId}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FAILED\",\n  \"failureNote\": \"Destinatário ausente na demonstração.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cliente acompanha falha sem nota interna",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/public/tracking/{{failedTrackingCode}}",
+            "description": "Esperado: HTTP 200. ",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Outro atendente não acessa entrega",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/deliveries/{{failedDeliveryId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 · Exclusões e logout",
+      "item": [
+        {
+          "name": "Excluir entrega concluída",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Entrega excluída não aparece",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/deliveries/{{deliveryId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pacote excluído não é público",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/public/tracking/{{trackingCode}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Excluir pedido concluído",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pedido excluído não aparece",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir entrega com falha pela URL composta",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/orders/{{secondOrderId}}/delivery",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir segundo pedido",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/orders/{{secondOrderId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Outro atendente exclui seu pedido",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/orders/{{foreignOrderId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir contato próprio",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/customers/{{customerId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Contato excluído não aparece",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers/{{customerId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Outro atendente exclui seu contato",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/customers/{{foreignCustomerId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir produto productId",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/products/{{productId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir produto secondProductId",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/products/{{secondProductId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir produto inactiveProductId",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/products/{{inactiveProductId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir produto foreignProductId",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/products/{{foreignProductId}}",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Produto excluído não aparece",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products/{{productId}}",
+            "description": "Esperado: HTTP 404. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar conta temporária",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 200. ",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{signupToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Conta de demonstração atualizada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Desativar conta temporária",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{signupToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Conta desativada perdeu acesso",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 401. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{signupToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout courierToken",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/logout",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token revogado courierToken",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 401. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{courierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout otherCourierToken",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/logout",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherCourierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token revogado otherCourierToken",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 401. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherCourierToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout otherAttendantToken",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/logout",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token revogado otherAttendantToken",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 401. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherAttendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout attendantToken",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/logout",
+            "description": "Esperado: HTTP 204. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token revogado attendantToken",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/me",
+            "description": "Esperado: HTTP 401. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Swagger rejeita sessão revogada",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api-docs/openapi.json",
+            "description": "Esperado: HTTP 401. ",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendantToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

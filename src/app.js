@@ -6,12 +6,14 @@ import productRoutes from './routes/productRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import deliveryRoutes, { orderDeliveryRoutes } from './routes/deliveryRoutes.js';
 import trackingRoutes from './routes/trackingRoutes.js';
+import docsRoutes from './routes/docsRoutes.js';
 import { errorHandler, notFound } from './middlewares/errorHandler.js';
 
 const app = express();
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '100kb' }));
+app.use('/api-docs', docsRoutes);
 app.use(trackingRoutes);
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
