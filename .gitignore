@@ -10,3 +10,4 @@ coverage/
 docs/
 Skills/
 postman/*.local.json
+backup/
