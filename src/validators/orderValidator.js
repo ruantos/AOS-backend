@@ -48,3 +48,5 @@ export const listOrderValidator = [
     .bail().custom((value, { req }) => !req.query.from || Date.parse(value) >= Date.parse(req.query.from)).withMessage('Data final deve ser posterior à inicial.'),
   validateResource,
 ];
+
+//orderValidator.js
