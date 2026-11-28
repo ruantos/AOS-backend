@@ -9,6 +9,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate dev",
@@ -27,7 +29,8 @@
     "swagger-ui-express": "5.0.1"
   },
   "devDependencies": {
-    "prisma": "7.10.1"
+    "prisma": "7.10.1",
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "effect": "3.22.5"
