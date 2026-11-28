@@ -1,5 +1,12 @@
 # Recife Express
 
+## Integrantes
+
+- Robson Juan Oliveira | 859894 
+- Vitória Inácia | 859888
+- Lucas Henrique de Lima Souza | 859898
+- Luiz Miguel Siqueira de Mendonça 859880
+
 API de pedidos e entregas locais, com atendentes e entregadores autenticados e rastreamento público para clientes sem cadastro.
 
 Projeto em desenvolvimento. Implementados e verificados em PostgreSQL local: base Express, persistência, autenticação, conta própria, CRUD de contatos/produtos/pedidos/entregas, itens, histórico e URLs compostas. O endpoint público de rastreamento está implementado e verificado por HTTP. Este repositório contém somente o backend. OpenAPI e Swagger UI autenticados também estão implementados. Seed repetível e coleção/ambiente Postman também estão implementados e verificados. Publicação e entregáveis finais ainda estão pendentes.
